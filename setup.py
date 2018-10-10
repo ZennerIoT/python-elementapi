@@ -7,8 +7,8 @@ setup(
   description = 'element-iot api client lib',
   author = 'Stefan Reiser',
   author_email = 'sr@zenner-iot.com',
-  url = 'https://github.com/element-iot/elementapi',
-  download_url = 'https://github.com/element-iot/elementapi/archive/master.zip',
+  url = 'https://github.com/ZennerIoT/python-elementapi',
+  download_url = 'https://github.com/ZennerIoT/python-elementapi/archive/master.zip',
   keywords = ['client', 'rest', 'element-iot'],
   classifiers = [
     'Development Status :: 3 - Alpha',
