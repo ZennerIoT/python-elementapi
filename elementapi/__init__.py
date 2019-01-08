@@ -24,8 +24,12 @@ class ElementAPI:
             self.baseurl=baseurl
 
         self.https = https
-        if(not port and not https):
-            self.port = 80 # most likely something bigger on onmprem deployments...
+        if port:
+            self.port = port
+        elif not port and https:
+            self.port = 443
+        elif not port and not https:
+            self.port = 80  # most likely something bigger on onmprem deployments...
 
         self.apitoken = apitoken
         self.apiversion = "/api/v%s" % apiversion
