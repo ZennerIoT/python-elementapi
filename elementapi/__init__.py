@@ -91,6 +91,16 @@ class ElementAPI:
         for d in self._req(uri=('tags', ), limit=limit, **opts):
             yield d
 
+    # single call
+    def tag(self, tag, limit=None, **opts):
+        if not tag:
+            raise ElementAPIException('required tag id or slug')
+        url = self.genurl(('tags', tag,), **opts)
+        self._log_request("GET", url)
+        resp = requests.get(url).json()
+
+        return resp.get('body', None)
+
     def devices(self, limit=None, tag=None, **opts):
         if(tag):
             uri = ('tags', tag, 'devices')
