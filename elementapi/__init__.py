@@ -1,8 +1,11 @@
+import sys
 import re
 
 import requests
 import logging
 
+
+pyv, _, _, _, _ = sys.version_info
 logger = logging.getLogger('elementapi')
 
 
@@ -161,4 +164,7 @@ def _filter(inpt, filter):
     if not filter or not inpt or not type(filter) == dict or not len(filter):
         return inpt
     else:
-        return inpt if filter.items() <= inpt.items() else None
+        if pyv==3:
+            return inpt if filter.items() <= inpt.items() else None
+        else:
+            return inpt if filter.viewitems() <= inpt.viewitems() else None
