@@ -36,9 +36,11 @@ class ElementAPI:
         self.sync = sync
 
     def genurl(self, _path=None, **opts):
-
         if( not 'limit' in opts or not opts['limit'] or opts['limit']>100):
             opts['limit'] = 100
+
+        if opts.get('nolimit', False):
+            opts.pop('limit')
 
         rurl = "%s%s:%s%s/%s?auth=%s%s"\
                % (
@@ -57,7 +59,7 @@ class ElementAPI:
                         meth,
                         re.sub(
                             r"auth=([a-z0-9]*$)|([a-z0-9]+&)",
-                            ("auth=xxxxxxxxxxxx"+("&" if self.apitoken+"&" in url else "")).replace('auth=auth=','auth='),
+                            ("auth=xxxxxxxxxxxx"+("&" if self.apitoken+"&" in url else "")).replace('auth=auth=', 'auth='),
                             url
                         ),
                         data
@@ -70,7 +72,7 @@ class ElementAPI:
 
         ilimit = limit
 
-        while( (resp==None or (resp != None and resp.get('retrieve_after_id', None))) and (not ilimit or ilimit and count<ilimit) ):
+        while (resp==None or (resp != None and resp.get('retrieve_after_id', None))) and (not ilimit or ilimit and count<ilimit):
             url = self.genurl((uri if uri else ()), retrieve_after=(resp.get('retrieve_after_id', None) if resp else None), limit=limit, **opts)
             self._log_request("GET", url)
             resp = requests.get(url)
@@ -83,7 +85,9 @@ class ElementAPI:
             if(resp.get('body',None)):
                 for d in resp['body']:
                     count += 1
-                    yield d['id'], _filter(d, filter)
+                    res = _filter(d, filter)
+                    if res:
+                        yield d['id'], res
                     if (ilimit and count == ilimit):
                         break
 
@@ -143,18 +147,18 @@ class ElementAPI:
         for i in resp.get('body', []):
             yield i['id'], i
 
+    def create(self, path, data):
+        url = self.genurl((path,), nolimit=True)
+        self._log_request("POST", url)
+        # TODO: data type check !?!
+        resp = requests.post(url, json=data)
 
-def _dict_filter(a, b):
-    if(not b or not a or not type(a)==dict or not len(b)):
-        return a
-
-    return {
-        k: _dict_filter(v, b[k]) for k, v in a.items() if k in b
-    }
+        return r.status_code, resp.json().get('body', [])
 
 
+# only works at level 0 atm !
 def _filter(inpt, filter):
-    if(not filter or not inpt or not type(filter)==dict or not len(filter)):
+    if not filter or not inpt or not type(filter) == dict or not len(filter):
         return inpt
     else:
-        return _dict_filter(inpt, filter)
+        return inpt if filter.items() <= inpt.items() else None
