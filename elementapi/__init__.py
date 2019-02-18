@@ -85,14 +85,27 @@ class ElementAPI:
 
             resp = resp.json()
 
-            if(resp.get('body',None)):
-                for d in resp['body']:
-                    count += 1
-                    res = _filter(d, filter)
-                    if res:
-                        yield d['id'], res
-                    if (ilimit and count == ilimit):
-                        break
+            if resp and resp.get('body', None):
+                if isinstance(resp['body'], list):
+                    for d in resp['body']:
+                        count += 1
+                        res = _filter(d, filter)
+                        if res and isinstance(res, dict):
+                            yield d['id'], res
+                        if (ilimit and count == ilimit):
+                            break
+                # a bit hacky ....
+                elif isinstance(resp['body'], dict):
+                    r = []
+                    for k, v in resp['body'].items():
+                        r += v if isinstance(v, list) else []
+                    for d in r:
+                        count += 1
+                        res = _filter(d, filter)
+                        if res and isinstance(res, dict):
+                            yield d['id'], res
+                        if (ilimit and count == ilimit):
+                            break
 
     def tags(self, limit=None, **opts):
         for d in self._req(uri=('tags', ), limit=limit, **opts):
@@ -156,7 +169,15 @@ class ElementAPI:
         # TODO: data type check !?!
         resp = requests.post(url, json=data)
 
-        return r.status_code, resp.json().get('body', [])
+        return resp.status_code, resp.json().get('body', [])
+
+    def drivers(self, limit=None, **opts):
+        for d in self._req(uri=('drivers', ), limit=limit, **opts):
+            yield d
+
+    def driver_instances(self, limit=None, **opts):
+        for d in self._req(uri=('drivers', 'instances'), limit=limit, **opts):
+            yield d
 
 
 # only works at level 0 atm !
@@ -164,7 +185,7 @@ def _filter(inpt, filter):
     if not filter or not inpt or not type(filter) == dict or not len(filter):
         return inpt
     else:
-        if pyv==3:
+        if pyv == 3:
             return inpt if filter.items() <= inpt.items() else None
         else:
             return inpt if filter.viewitems() <= inpt.viewitems() else None
