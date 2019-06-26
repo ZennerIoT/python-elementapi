@@ -39,7 +39,7 @@ class ElementAPI:
         self.sync = sync
 
     def genurl(self, _path=None, **opts):
-        if( not 'limit' in opts or not opts['limit'] or opts['limit']>100):
+        if 'limit' not in opts or not opts['limit'] or opts['limit']>100:
             opts['limit'] = 100
 
         if opts.get('nolimit', False):
@@ -52,7 +52,8 @@ class ElementAPI:
                    self.port,
                    self.apiversion, '/'.join(_path) if _path else '/',
                    self.apitoken,
-                   '' if (not opts or not len(opts)) else ('&%s' % '&'.join(['%s=%s' % (k, v) for k, v in opts.items() if v]))
+                   '' if (not opts or not len(opts))
+                   else ('&%s' % '&'.join(['%s=%s' % (k, v) for k, v in opts.items() if v]))
                )
         return rurl
 
@@ -75,15 +76,23 @@ class ElementAPI:
 
         ilimit = limit
 
-        while (resp==None or (resp != None and resp.get('retrieve_after_id', None))) and (not ilimit or ilimit and count<ilimit):
-            url = self.genurl((uri if uri else ()), retrieve_after=(resp.get('retrieve_after_id', None) if resp else None), limit=limit, **opts)
+        while (resp is None or (resp is not None and resp.get('retrieve_after_id', None)))\
+               and (not ilimit or ilimit and count < ilimit
+        ):
+            url = self.genurl(
+                (uri if uri else ()),
+                retrieve_after=(resp.get('retrieve_after_id', None) if resp else None),
+                limit=limit, **opts
+            )
             self._log_request("GET", url)
             resp = requests.get(url)
 
-            if(resp.status_code>=400):
+            if resp.status_code >= 400:
                 raise ElementAPIException(resp.status_code)
 
             resp = resp.json()
+            if not resp:
+                raise ElementAPIException(resp.text)
 
             if resp and resp.get('body', None):
                 if isinstance(resp['body'], list):
@@ -92,7 +101,7 @@ class ElementAPI:
                         res = _filter(d, filter)
                         if res and isinstance(res, dict):
                             yield d['id'], res
-                        if (ilimit and count == ilimit):
+                        if ilimit and count == ilimit:
                             break
                 # a bit hacky ....
                 elif isinstance(resp['body'], dict):
@@ -104,7 +113,7 @@ class ElementAPI:
                         res = _filter(d, filter)
                         if res and isinstance(res, dict):
                             yield d['id'], res
-                        if (ilimit and count == ilimit):
+                        if ilimit and count == ilimit:
                             break
 
     def tags(self, limit=None, **opts):
@@ -149,7 +158,12 @@ class ElementAPI:
             raise ElementAPIException('required device name or slug')
         url = self.genurl(('devices', device,), **opts)
         self._log_request("GET", url)
-        resp = requests.get(url).json()
+        meth =  opts.get('method', 'get').lower()
+
+        if meth == 'get':
+            resp = requests.get(url).json()
+        if meth == 'delete':
+            reso = requests.delete(url).json()
 
         return resp.get('body', None)
 
@@ -163,13 +177,21 @@ class ElementAPI:
         for i in resp.get('body', []):
             yield i['id'], i
 
+    def apikeys(self, limit=None, **opts):
+        for k in self._req(uri=('api_keys'), limit=limit, **opts):
+            yield k
+
     def create(self, path, data):
+        # TODO: if path is iterable -> tuple
         url = self.genurl((path,), nolimit=True)
         self._log_request("POST", url)
         # TODO: data type check !?!
         resp = requests.post(url, json=data)
 
-        return resp.status_code, resp.json().get('body', [])
+        try:
+            return resp.status_code, resp.json().get('body', [])
+        except Exception as e:
+            raise ElementAPIException('failed to create %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
 
     def drivers(self, limit=None, **opts):
         for d in self._req(uri=('drivers', ), limit=limit, **opts):
