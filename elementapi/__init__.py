@@ -200,7 +200,7 @@ class ElementAPI:
         url = self.genurl((path,), nolimit=True)
         self._log_request("PUT", url)
         # TODO: data type check !?!
-        resp = requests.post(url, json=data)
+        resp = requests.put(url, json=data)
 
         try:
             return resp.status_code, resp.json().get('body', [])
