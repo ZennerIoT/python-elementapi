@@ -1,3 +1,5 @@
+# TODO: accep uuid type in addition to string for ids !!!
+
 import sys
 import re
 
@@ -158,7 +160,7 @@ class ElementAPI:
             raise ElementAPIException('required device name or slug')
         url = self.genurl(('devices', device,), **opts)
         self._log_request("GET", url)
-        meth =  opts.get('method', 'get').lower()
+        meth = opts.get('method', 'get').lower()
 
         if meth == 'get':
             resp = requests.get(url).json()
@@ -192,6 +194,18 @@ class ElementAPI:
             return resp.status_code, resp.json().get('body', [])
         except Exception as e:
             raise ElementAPIException('failed to create %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
+
+    def update(self, path, data):
+        # TODO: if path is iterable -> tuple
+        url = self.genurl((path,), nolimit=True)
+        self._log_request("PUT", url)
+        # TODO: data type check !?!
+        resp = requests.post(url, json=data)
+
+        try:
+            return resp.status_code, resp.json().get('body', [])
+        except Exception as e:
+            raise ElementAPIException('failed to update %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
 
     def drivers(self, limit=None, **opts):
         for d in self._req(uri=('drivers', ), limit=limit, **opts):
