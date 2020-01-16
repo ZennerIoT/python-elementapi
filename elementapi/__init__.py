@@ -1,15 +1,15 @@
 # TODO: accep uuid type in addition to string for ids !!!
 
-import sys
+import logging
 import re
+import sys
 
 import requests
-import logging
-
 
 pyv, _, _, _, _ = sys.version_info
 logger = logging.getLogger('elementapi')
 
+IDENTIFIER_TYPES = ('id', 'slug', 'name', 'eui', 'address')
 
 class ElementAPIException(Exception):
     def __init__(self, cause, **kwargs):
@@ -78,8 +78,10 @@ class ElementAPI:
 
         ilimit = limit
 
-        while (resp is None or (resp is not None and resp.get('retrieve_after_id', None)))\
-               and (not ilimit or ilimit and count < ilimit
+        while (resp is None or (
+                    resp is not None and resp.get('retrieve_after_id', None)
+        )) and (
+                not ilimit or ilimit and count < ilimit
         ):
             url = self.genurl(
                 (uri if uri else ()),
@@ -133,7 +135,7 @@ class ElementAPI:
         return resp.get('body', None)
 
     def devices(self, limit=None, tag=None, **opts):
-        if(tag):
+        if tag:
             uri = ('tags', tag, 'devices')
         else:
             uri = ('devices',)
@@ -158,6 +160,7 @@ class ElementAPI:
     def device(self, device, **opts):
         if not device:
             raise ElementAPIException('required device name or slug')
+
         url = self.genurl(('devices', device,), **opts)
         self._log_request("GET", url)
         meth = opts.get('method', 'get').lower()
@@ -165,7 +168,7 @@ class ElementAPI:
         if meth == 'get':
             resp = requests.get(url).json()
         if meth == 'delete':
-            reso = requests.delete(url).json()
+            resp = requests.delete(url).json()
 
         return resp.get('body', None)
 
@@ -213,6 +216,24 @@ class ElementAPI:
 
     def driver_instances(self, limit=None, **opts):
         for d in self._req(uri=('drivers', 'instances'), limit=limit, **opts):
+            yield d
+
+    def get_devices_by(self, by, identifier, limit=None, **opts):
+        if by not in IDENTIFIER_TYPES:
+            raise ElementAPIException('unknown identifier type: %s' % identifier)
+        for d in self._req(uri=('devices', 'by-%s' % by, identifier), limit=limit, **opts):
+            yield d
+
+    def get_packets_by(self, by, identifier, limit=None, **opts):
+        if by not in IDENTIFIER_TYPES:
+            raise ElementAPIException('unknown identifier type: %s' % identifier)
+        for d in self._req(uri=('devices', 'by-%s' % by, identifier, 'packets'), limit=limit, **opts):
+            yield d
+
+    def get_readings_by(self, by, identifier, limit=None, **opts):
+        if by not in IDENTIFIER_TYPES:
+            raise ElementAPIException('unknown identifier type: %s' % identifier)
+        for d in self._req(uri=('devices', 'by-%s' % by, identifier, 'readings'), limit=limit, **opts):
             yield d
 
 

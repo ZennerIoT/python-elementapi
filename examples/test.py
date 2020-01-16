@@ -6,7 +6,7 @@ api = ElementAPI("<your api key>", baseurl='stage.element-iot.com')
 
 print("TAGS\n"+16*'-')
 for t in api.tags():
-   print(t)
+    print(t)
 
 print("DEVICES\n"+16*'-')
 for d in api.devices(limit=10, filter={'slug': None, 'updated_at': None}):
@@ -24,3 +24,4 @@ for p in api.packets('<your device uuid>', limit=10):
 print("READINGS\n"+16*'-')
 for r in api.readings('<your device uuid>', limit=10):
     print(r)
+
