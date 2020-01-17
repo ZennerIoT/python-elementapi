@@ -11,9 +11,13 @@ logger = logging.getLogger('elementapi')
 
 IDENTIFIER_TYPES = ('id', 'slug', 'name', 'eui', 'address')
 
+
 class ElementAPIException(Exception):
-    def __init__(self, cause, **kwargs):
+    msg = None
+
+    def __init__(self, cause, msg=None, **kwargs):
         super(ElementAPIException, self).__init__(cause, **kwargs)
+        self.msg = msg
 
 
 class ElementAPI:
@@ -92,7 +96,7 @@ class ElementAPI:
             resp = requests.get(url)
 
             if resp.status_code >= 400:
-                raise ElementAPIException(resp.status_code)
+                raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
 
             resp = resp.json()
             if not resp:
@@ -165,8 +169,7 @@ class ElementAPI:
         self._log_request("GET", url)
         meth = opts.get('method', 'get').lower()
 
-        if meth == 'get':
-            resp = requests.get(url).json()
+        resp = requests.get(url).json()
         if meth == 'delete':
             resp = requests.delete(url).json()
 
@@ -194,7 +197,10 @@ class ElementAPI:
         resp = requests.post(url, json=data)
 
         try:
-            return resp.status_code, resp.json().get('body', [])
+            js = resp.json()
+            if resp.status_code>=400:
+                raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
+            return resp.status_code, js.get('body', [])
         except Exception as e:
             raise ElementAPIException('failed to create %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
 
@@ -204,9 +210,12 @@ class ElementAPI:
         self._log_request("PUT", url)
         # TODO: data type check !?!
         resp = requests.put(url, json=data)
-
+        print("!!!!", resp.text)
         try:
-            return resp.status_code, resp.json().get('body', [])
+            js = resp.json()
+            if resp.status_code >= 400:
+                raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
+            return resp.status_code, js.get('body', [])
         except Exception as e:
             raise ElementAPIException('failed to update %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
 
