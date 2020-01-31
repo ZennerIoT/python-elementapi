@@ -76,7 +76,7 @@ class ElementAPI:
                     )
         )
 
-    def _req(self, uri=None, limit=None, filter=None, **opts):
+    def _req(self, uri=None, limit=None, lib_filter=None, **opts):
         resp = None
         count = 0
 
@@ -106,7 +106,7 @@ class ElementAPI:
                 if isinstance(resp['body'], list):
                     for d in resp['body']:
                         count += 1
-                        res = _filter(d, filter)
+                        res = _filter(d, lib_filter)
                         if res and isinstance(res, dict):
                             yield d['id'], res
                         if ilimit and count == ilimit:
@@ -118,7 +118,7 @@ class ElementAPI:
                         r += v if isinstance(v, list) else []
                     for d in r:
                         count += 1
-                        res = _filter(d, filter)
+                        res = _filter(d, lib_filter)
                         if res and isinstance(res, dict):
                             yield d['id'], res
                         if ilimit and count == ilimit:
@@ -210,7 +210,7 @@ class ElementAPI:
         self._log_request("PUT", url)
         # TODO: data type check !?!
         resp = requests.put(url, json=data)
-        print("!!!!", resp.text)
+        # print("!!!!", resp.text)
         try:
             js = resp.json()
             if resp.status_code >= 400:
@@ -221,6 +221,10 @@ class ElementAPI:
 
     def drivers(self, limit=None, **opts):
         for d in self._req(uri=('drivers', ), limit=limit, **opts):
+            yield d
+
+    def mandates(self, limit=None, **opts):
+        for d in self._req(uri=('mandates', ), limit=limit, **opts):
             yield d
 
     def driver_instances(self, limit=None, **opts):
