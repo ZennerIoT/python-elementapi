@@ -8,6 +8,10 @@ print("TAGS\n"+16*'-')
 for t in api.tags():
     print(t)
 
+print("DEVICES STREAM\n"+16*'-')
+for d in api.devices(stream=True, filter={'slug': None, 'updated_at': None}):
+    print(d)
+
 print("DEVICES\n"+16*'-')
 for d in api.devices(limit=10, filter={'slug': None, 'updated_at': None}):
     print(d)

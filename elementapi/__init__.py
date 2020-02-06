@@ -1,8 +1,9 @@
 # TODO: accep uuid type in addition to string for ids !!!
-
+import json
 import logging
 import re
 import sys
+import time
 
 import requests
 
@@ -76,55 +77,100 @@ class ElementAPI:
                     )
         )
 
-    def _req(self, uri=None, limit=None, lib_filter=None, **opts):
+    def _req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, **opts):
         resp = None
         count = 0
 
         ilimit = limit
 
-        while (resp is None or (
-                    resp is not None and resp.get('retrieve_after_id', None)
-        )) and (
-                not ilimit or ilimit and count < ilimit
-        ):
+        if stream:
             url = self.genurl(
-                (uri if uri else ()),
-                retrieve_after=(resp.get('retrieve_after_id', None) if resp else None),
-                limit=limit, **opts
+                (uri if uri else ()) + ('stream',),
+                nolimit=True,
+                **opts
             )
-            self._log_request("GET", url)
+            self._log_request("GET (streaming)", url)
             resp = requests.get(url)
 
             if resp.status_code >= 400:
                 raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
 
-            resp = resp.json()
-            if not resp:
-                raise ElementAPIException(resp.text)
+            for line in resp.iter_lines():
+                # filter out keep-alive new lines
+                if line:
+                    count += 1
+                    decoded_line = line.decode('utf-8')
+                    j = json.loads(decoded_line)
+                    yield j['id'], j
 
-            if resp and resp.get('body', None):
-                if isinstance(resp['body'], list):
-                    for d in resp['body']:
-                        count += 1
-                        res = _filter(d, lib_filter)
-                        if res and isinstance(res, dict):
-                            yield d['id'], res
-                        if ilimit and count == ilimit:
-                            break
-                # a bit hacky ....
-                elif isinstance(resp['body'], dict):
-                    r = []
-                    for k, v in resp['body'].items():
-                        r += v if isinstance(v, list) else []
-                    for d in r:
-                        count += 1
-                        res = _filter(d, lib_filter)
-                        if res and isinstance(res, dict):
-                            yield d['id'], res
-                        if ilimit and count == ilimit:
-                            break
+        else:
+
+            last_response = None
+
+            while (resp is None or (
+                        resp is not None and resp.get('retrieve_after_id', None)
+            )) and (
+                    not ilimit or ilimit and count < ilimit
+            ):
+                url = self.genurl(
+                    (uri if uri else ()),
+                    retrieve_after=(resp.get('retrieve_after_id', None) if resp else None),
+                    limit=limit, **opts
+                )
+                self._log_request("GET", url)
+                last_response = resp
+                resp = requests.get(url)
+
+                if resp.status_code >= 400:
+                    if resp.status_code == 429 and not raise_rl:
+                        # hit reate-limit
+
+                        # sleep|block
+
+                        rl_s = int(resp.headers.get('x-ratelimit-reset', 0))
+                        logger.info('hit rate limit, blocking further requests for %s ms' % rl_s)
+
+                        # keep last
+                        resp = None if not last_response else {'retrieve_after_id': last_response.get('retrieve_after_id', None)}
+
+                        # using this async will lead to a LIFO behaviour !!!
+                        time.sleep(rl_s/1000.0)
+                        continue
+                    else:
+                        # your bad ...
+                        raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
+
+                resp = resp.json()
+                if not resp:
+                    raise ElementAPIException(resp.text)
+
+                if resp and resp.get('body', None):
+                    if isinstance(resp['body'], list):
+                        for d in resp['body']:
+                            count += 1
+                            res = _filter(d, lib_filter)
+                            if res and isinstance(res, dict):
+                                yield d['id'], res
+                            if ilimit and count == ilimit:
+                                break
+                    # a bit hacky ....
+                    elif isinstance(resp['body'], dict):
+                        r = []
+                        for k, v in resp['body'].items():
+                            r += v if isinstance(v, list) else []
+                        for d in r:
+                            count += 1
+                            res = _filter(d, lib_filter)
+                            if res and isinstance(res, dict):
+                                yield d['id'], res
+                            if ilimit and count == ilimit:
+                                break
 
     def tags(self, limit=None, **opts):
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         for d in self._req(uri=('tags', ), limit=limit, **opts):
             yield d
 
@@ -132,6 +178,10 @@ class ElementAPI:
     def tag(self, tag, limit=None, **opts):
         if not tag:
             raise ElementAPIException('required tag id or slug')
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         url = self.genurl(('tags', tag,), **opts)
         self._log_request("GET", url)
         resp = requests.get(url).json()
@@ -139,6 +189,10 @@ class ElementAPI:
         return resp.get('body', None)
 
     def devices(self, limit=None, tag=None, **opts):
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         if tag:
             uri = ('tags', tag, 'devices')
         else:
@@ -165,6 +219,9 @@ class ElementAPI:
         if not device:
             raise ElementAPIException('required device name or slug')
 
+        # no streaming yet
+        opts.pop('stream', None)
+
         url = self.genurl(('devices', device,), **opts)
         self._log_request("GET", url)
         meth = opts.get('method', 'get').lower()
@@ -178,6 +235,10 @@ class ElementAPI:
     def interfaces(self, device, limit=None, **opts):
         if not device:
             raise ElementAPIException('required device name or slug')
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         url = self.genurl(('devices', device, 'interfaces'), **opts)
         self._log_request("GET", url)
         resp = requests.get(url).json()
@@ -186,6 +247,10 @@ class ElementAPI:
             yield i['id'], i
 
     def apikeys(self, limit=None, **opts):
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         for k in self._req(uri=('api_keys'), limit=limit, **opts):
             yield k
 
@@ -220,18 +285,34 @@ class ElementAPI:
             raise ElementAPIException('failed to update %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
 
     def drivers(self, limit=None, **opts):
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         for d in self._req(uri=('drivers', ), limit=limit, **opts):
             yield d
 
     def mandates(self, limit=None, **opts):
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         for d in self._req(uri=('mandates', ), limit=limit, **opts):
             yield d
 
     def driver_instances(self, limit=None, **opts):
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         for d in self._req(uri=('drivers', 'instances'), limit=limit, **opts):
             yield d
 
     def get_devices_by(self, by, identifier, limit=None, **opts):
+
+        # no streaming yet
+        opts.pop('stream', None)
+
         if by not in IDENTIFIER_TYPES:
             raise ElementAPIException('unknown identifier type: %s' % identifier)
         for d in self._req(uri=('devices', 'by-%s' % by, identifier), limit=limit, **opts):
