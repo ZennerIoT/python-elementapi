@@ -93,7 +93,7 @@ class ElementAPI:
             resp = requests.get(url)
 
             if resp.status_code >= 400:
-                raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
+                raise ElementAPIException(resp.status_code, msg=resp.text)
 
             for line in resp.iter_lines():
                 # filter out keep-alive new lines
@@ -138,7 +138,7 @@ class ElementAPI:
                         continue
                     else:
                         # your bad ...
-                        raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
+                        raise ElementAPIException(resp.status_code, msg=resp.text)
 
                 resp = resp.json()
                 if not resp:
@@ -264,7 +264,7 @@ class ElementAPI:
         try:
             js = resp.json()
             if resp.status_code>=400:
-                raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
+                raise ElementAPIException(resp.status_code, msg=resp.text)
             return resp.status_code, js.get('body', [])
         except Exception as e:
             raise ElementAPIException('failed to create %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
@@ -279,7 +279,7 @@ class ElementAPI:
         try:
             js = resp.json()
             if resp.status_code >= 400:
-                raise ElementAPIException(resp.status_code, msg=resp.json().get('error', []))
+                raise ElementAPIException(resp.status_code, msg=resp.text)
             return resp.status_code, js.get('body', [])
         except Exception as e:
             raise ElementAPIException('failed to update %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
