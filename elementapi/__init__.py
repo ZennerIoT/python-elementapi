@@ -2,10 +2,10 @@
 import json
 import logging
 import re
-import sys
-import time
 
 import requests
+import sys
+import time
 
 pyv, _, _, _, _ = sys.version_info
 logger = logging.getLogger('elementapi')
@@ -23,15 +23,15 @@ class ElementAPIException(Exception):
 
 class ElementAPI:
     apitoken = None
-    baseurl="element-iot.com"
+    baseurl = "element-iot.com"
     https = True
     port = 443
-    apiversion="/"
+    apiversion = "/"
     sync = False
 
     def __init__(self, apitoken, baseurl=None, https=True, port=None, apiversion=1, sync=False):
-        if(baseurl):
-            self.baseurl=baseurl
+        if baseurl:
+            self.baseurl = baseurl
 
         self.https = https
         if port:
@@ -45,14 +45,15 @@ class ElementAPI:
         self.apiversion = "/api/v%s" % apiversion
         self.sync = sync
 
+    # TODO: allow plain string paths !
     def genurl(self, _path=None, **opts):
-        if 'limit' not in opts or not opts['limit'] or opts['limit']>100:
+        if 'limit' not in opts or not opts['limit'] or opts['limit'] > 100:
             opts['limit'] = 100
 
         if opts.get('nolimit', False):
             opts.pop('limit')
 
-        rurl = "%s%s:%s%s/%s?auth=%s%s"\
+        rurl = "%s%s:%s%s/%s?auth=%s%s" \
                % (
                    "https://" if self.https else "http://",
                    self.baseurl,
@@ -65,16 +66,11 @@ class ElementAPI:
         return rurl
 
     def _log_request(self, meth, url, data=None):
-        logger.info("HTTP %s : %s -> %s" %
-                    (
-                        meth,
-                        re.sub(
-                            r"auth=([a-z0-9]*$)|([a-z0-9]+&)",
-                            ("auth=xxxxxxxxxxxx"+("&" if self.apitoken+"&" in url else "")).replace('auth=auth=', 'auth='),
-                            url
-                        ),
-                        data
-                    )
+        logger.info("HTTP %s : %s -> %s" % (
+                meth,
+                re.sub(r"auth=[a-zA-Z0-9]+", 'auth=xxxxxxxxxx', url),
+                data
+            )
         )
 
     def _req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, **opts):
@@ -93,7 +89,7 @@ class ElementAPI:
             resp = requests.get(url)
 
             if resp.status_code >= 400:
-                raise ElementAPIException(resp.status_code, msg=resp.text)
+                raise ElementAPIException(resp.status_code, msg=resp.json())
 
             for line in resp.iter_lines():
                 # filter out keep-alive new lines
@@ -104,11 +100,10 @@ class ElementAPI:
                     yield j['id'], j
 
         else:
-
             last_response = None
 
             while (resp is None or (
-                        resp is not None and resp.get('retrieve_after_id', None)
+                    resp is not None and resp.get('retrieve_after_id', None)
             )) and (
                     not ilimit or ilimit and count < ilimit
             ):
@@ -131,18 +126,19 @@ class ElementAPI:
                         logger.info('hit rate limit, blocking further requests for %s ms' % rl_s)
 
                         # keep last
-                        resp = None if not last_response else {'retrieve_after_id': last_response.get('retrieve_after_id', None)}
+                        resp = None if not last_response else {
+                            'retrieve_after_id': last_response.get('retrieve_after_id', None)}
 
                         # using this async will lead to a LIFO behaviour !!!
-                        time.sleep(rl_s/1000.0)
+                        time.sleep(rl_s / 1000.0)
                         continue
                     else:
                         # your bad ...
-                        raise ElementAPIException(resp.status_code, msg=resp.text)
+                        raise ElementAPIException(resp.status_code, msg=resp.json())
 
                 resp = resp.json()
                 if not resp:
-                    raise ElementAPIException(resp.text)
+                    raise ElementAPIException(resp.status_code, msg=resp.json())
 
                 if resp and resp.get('body', None):
                     if isinstance(resp['body'], list):
@@ -171,7 +167,7 @@ class ElementAPI:
         # no streaming yet
         opts.pop('stream', None)
 
-        for d in self._req(uri=('tags', ), limit=limit, **opts):
+        for d in self._req(uri=('tags',), limit=limit, **opts):
             yield d
 
     # single call
@@ -261,13 +257,10 @@ class ElementAPI:
         # TODO: data type check !?!
         resp = requests.post(url, json=data)
 
-        try:
-            js = resp.json()
-            if resp.status_code>=400:
-                raise ElementAPIException(resp.status_code, msg=resp.text)
-            return resp.status_code, js.get('body', [])
-        except Exception as e:
-            raise ElementAPIException('failed to create %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
+        js = resp.json()
+        if resp.status_code >= 400:
+            raise ElementAPIException(resp.status_code, msg=resp.json())
+        return resp.status_code, js.get('body', [])
 
     def update(self, path, data):
         # TODO: if path is iterable -> tuple
@@ -276,20 +269,18 @@ class ElementAPI:
         # TODO: data type check !?!
         resp = requests.put(url, json=data)
         # print("!!!!", resp.text)
-        try:
-            js = resp.json()
-            if resp.status_code >= 400:
-                raise ElementAPIException(resp.status_code, msg=resp.text)
-            return resp.status_code, js.get('body', [])
-        except Exception as e:
-            raise ElementAPIException('failed to update %s %s -> [%s] : %s' % (path, resp.status_code, type(e), str(e)))
+
+        js = resp.json()
+        if resp.status_code >= 400:
+            raise ElementAPIException(resp.status_code, msg=resp.text)
+        return resp.status_code, js.get('body', [])
 
     def drivers(self, limit=None, **opts):
 
         # no streaming yet
         opts.pop('stream', None)
 
-        for d in self._req(uri=('drivers', ), limit=limit, **opts):
+        for d in self._req(uri=('drivers',), limit=limit, **opts):
             yield d
 
     def mandates(self, limit=None, **opts):
@@ -297,7 +288,7 @@ class ElementAPI:
         # no streaming yet
         opts.pop('stream', None)
 
-        for d in self._req(uri=('mandates', ), limit=limit, **opts):
+        for d in self._req(uri=('mandates',), limit=limit, **opts):
             yield d
 
     def driver_instances(self, limit=None, **opts):
@@ -331,6 +322,7 @@ class ElementAPI:
             yield d
 
 
+# these are local only filters !
 # only works at level 0 atm !
 def _filter(inpt, filter):
     if not filter or not inpt or not type(filter) == dict or not len(filter):
