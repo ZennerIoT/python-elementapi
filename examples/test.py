@@ -4,8 +4,7 @@ import os
 import sys
 
 logging.basicConfig(level=logging.INFO)
-from elementapi import ElementAPI
-
+from elementapi import ElementAPI, ElementAPIException
 
 apikey = os.getenv('ELEMENT_APIKEY', None)
 if not apikey:
@@ -14,9 +13,12 @@ if not apikey:
 api = ElementAPI(apikey, baseurl='stage.element-iot.com')
 
 print("TAGS\n"+16*'-')
-for t in api.tags(lmit=1):
-    print(json.dumps(t,sort_keys=True, indent=2))
+try:
+    for t in api.tags(lmit=1):
+        print(json.dumps(t, sort_keys=True, indent=2))
 
+except ElementAPIException as eae:
+    print(eae)
 print()
 
 print("DEVICES STREAM\n"+16*'-')

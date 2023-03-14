@@ -1,5 +1,8 @@
-# TODO: accep uuid type in addition to string for ids !!!
-import json
+try:
+    import ujson as json
+except:
+    import json
+
 import logging
 import re
 
@@ -16,9 +19,40 @@ IDENTIFIER_TYPES = ('id', 'slug', 'name', 'eui', 'address')
 class ElementAPIException(Exception):
     msg = None
 
-    def __init__(self, cause, msg=None, **kwargs):
+    def __init__(self, cause, status_code=None, msg=None, **kwargs):
         super(ElementAPIException, self).__init__(cause, **kwargs)
+        self.cause = cause
+        self.status_code = status_code
         self.msg = msg
+
+    def _str(self):
+        return 'ELEMENTAPI Exception, caused by `%s` %s : %s' % (
+            str(self.cause),
+            "with status code %s" % self.status_code if self.status_code else '',
+            self.msg
+        )
+
+    def __repr__(self):
+       return self._str()
+
+    def __str__(self):
+        return self._str()
+
+
+def get_body(resp):
+    try:
+        r = resp.json()
+    except requests.exceptions.JSONDecodeError:
+        if '<body>' in resp.text:
+            try:
+                r = resp.text[resp.index('<body>')+6:resp.rindex('</body>')].strip()
+            except:
+                r = resp.text
+        else:
+            r = resp.text
+
+    return r
+
 
 
 class ElementAPI:
@@ -28,8 +62,10 @@ class ElementAPI:
     port = 443
     apiversion = "/"
     sync = False
+    proxies = None
+    headers = {'Accept': 'application/json'}
 
-    def __init__(self, apitoken, baseurl=None, https=True, port=None, apiversion=1, sync=False):
+    def __init__(self, apitoken, baseurl=None, https=True, port=None, apiversion=1, sync=False, proxies=None):
         if baseurl:
             self.baseurl = baseurl
 
@@ -44,6 +80,19 @@ class ElementAPI:
         self.apitoken = apitoken
         self.apiversion = "/api/v%s" % apiversion
         self.sync = sync
+
+        if proxies:
+            if type(proxies) is dict:
+                self.proxies = proxies
+            elif type(proxies) is str:
+                # TODO: check if string ?
+                self.proxies = {'http%s' % ('s' if https else ''): proxies}
+                
+        self.requestargs = {
+            'headers': self.headers,
+            'proxies': self.proxies
+        }
+
 
     # TODO: allow plain string paths !
     def genurl(self, _path=None, **opts):
@@ -86,10 +135,10 @@ class ElementAPI:
                 **opts
             )
             self._log_request("GET (streaming)", url)
-            resp = requests.get(url)
+            resp = requests.get(url, **self.requestargs)
 
             if resp.status_code >= 400:
-                raise ElementAPIException(resp.status_code, msg=resp.json())
+                raise ElementAPIException('HTTP Error', resp.status_code, get_body(resp))
 
             for line in resp.iter_lines():
                 # filter out keep-alive new lines
@@ -114,7 +163,7 @@ class ElementAPI:
                 )
                 self._log_request("GET", url)
                 last_response = resp
-                resp = requests.get(url)
+                resp = requests.get(url, **self.requestargs)
 
                 if resp.status_code >= 400:
                     if resp.status_code == 429 and not raise_rl:
@@ -134,11 +183,11 @@ class ElementAPI:
                         continue
                     else:
                         # your bad ...
-                        raise ElementAPIException(resp.status_code, msg=resp.json())
+                        raise ElementAPIException('HTTP Error', resp.status_code, get_body(resp))
 
                 resp = resp.json()
                 if not resp:
-                    raise ElementAPIException(resp.status_code, msg=resp.json())
+                    raise ElementAPIException('HTTP Error', resp.status_code, get_body(resp))
 
                 if resp and resp.get('body', None):
                     if isinstance(resp['body'], list):
@@ -173,14 +222,14 @@ class ElementAPI:
     # single call
     def tag(self, tag, limit=None, **opts):
         if not tag:
-            raise ElementAPIException('required tag id or slug')
+            raise ElementAPIException('Op Error', msg='required tag id or slug')
 
         # no streaming yet
         opts.pop('stream', None)
 
         url = self.genurl(('tags', tag,), **opts)
         self._log_request("GET", url)
-        resp = requests.get(url).json()
+        resp = requests.get(url, **self.requestargs).json()
 
         return resp.get('body', None)
 
@@ -200,20 +249,20 @@ class ElementAPI:
 
     def packets(self, device, limit=None, **opts):
         if not device:
-            raise ElementAPIException('required device name or slug')
+            raise ElementAPIException('Op Error', 'required device name or slug')
         for p in self._req(uri=('devices', device, 'packets'), limit=limit, **opts):
             yield p
 
     def readings(self, device, limit=None, **opts):
         if not device:
-            raise ElementAPIException('required device name or slug')
+            raise ElementAPIException('Op Error', 'required device name or slug')
         for r in self._req(uri=('devices', device, 'readings'), limit=limit, **opts):
             yield r
 
     # single call
     def device(self, device, **opts):
         if not device:
-            raise ElementAPIException('required device name or slug')
+            raise ElementAPIException('Op Error', 'required device name or slug')
 
         # no streaming yet
         opts.pop('stream', None)
@@ -222,7 +271,7 @@ class ElementAPI:
         self._log_request("GET", url)
         meth = opts.get('method', 'get').lower()
 
-        resp = requests.get(url).json()
+        resp = requests.get(url, **self.requestargs).json()
         if meth == 'delete':
             resp = requests.delete(url).json()
 
@@ -230,14 +279,14 @@ class ElementAPI:
 
     def interfaces(self, device, limit=None, **opts):
         if not device:
-            raise ElementAPIException('required device name or slug')
+            raise ElementAPIException('Op Error', msg='required device name or slug')
 
         # no streaming yet
         opts.pop('stream', None)
 
         url = self.genurl(('devices', device, 'interfaces'), **opts)
         self._log_request("GET", url)
-        resp = requests.get(url).json()
+        resp = requests.get(url, **self.requestargs).json()
 
         for i in resp.get('body', []):
             yield i['id'], i
@@ -255,11 +304,11 @@ class ElementAPI:
         url = self.genurl((path,), nolimit=True)
         self._log_request("POST", url)
         # TODO: data type check !?!
-        resp = requests.post(url, json=data)
+        resp = requests.post(url, **self.requestargs, json=data)
 
         js = resp.json()
         if resp.status_code >= 400:
-            raise ElementAPIException(resp.status_code, msg=resp.json())
+            raise ElementAPIException('HTTP Error', resp.status_code, msg=get_body(resp))
         return resp.status_code, js.get('body', [])
 
     def update(self, path, data):
@@ -267,12 +316,12 @@ class ElementAPI:
         url = self.genurl((path,), nolimit=True)
         self._log_request("PUT", url)
         # TODO: data type check !?!
-        resp = requests.put(url, json=data)
+        resp = requests.put(url, **self.requestargs, json=data)
         # print("!!!!", resp.text)
 
         js = resp.json()
         if resp.status_code >= 400:
-            raise ElementAPIException(resp.status_code, msg=resp.text)
+            raise ElementAPIException('HTTP Error', resp.status_code, msg=get_body(resp))
         return resp.status_code, js.get('body', [])
 
     def drivers(self, limit=None, **opts):
@@ -305,19 +354,19 @@ class ElementAPI:
         opts.pop('stream', None)
 
         if by not in IDENTIFIER_TYPES:
-            raise ElementAPIException('unknown identifier type: %s' % identifier)
+            raise ElementAPIException('Op Error', msg='unknown identifier type: %s' % identifier)
         for d in self._req(uri=('devices', 'by-%s' % by, identifier), limit=limit, **opts):
             yield d
 
     def get_packets_by(self, by, identifier, limit=None, **opts):
         if by not in IDENTIFIER_TYPES:
-            raise ElementAPIException('unknown identifier type: %s' % identifier)
+            raise ElementAPIException('Op Error', msg='unknown identifier type: %s' % identifier)
         for d in self._req(uri=('devices', 'by-%s' % by, identifier, 'packets'), limit=limit, **opts):
             yield d
 
     def get_readings_by(self, by, identifier, limit=None, **opts):
         if by not in IDENTIFIER_TYPES:
-            raise ElementAPIException('unknown identifier type: %s' % identifier)
+            raise ElementAPIException('Op Error', msg='unknown identifier type: %s' % identifier)
         for d in self._req(uri=('devices', 'by-%s' % by, identifier, 'readings'), limit=limit, **opts):
             yield d
 
