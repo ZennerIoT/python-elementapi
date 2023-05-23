@@ -33,7 +33,7 @@ class ElementAPIException(Exception):
         )
 
     def __repr__(self):
-       return self._str()
+        return self._str()
 
     def __str__(self):
         return self._str()
@@ -54,7 +54,6 @@ def get_body(resp):
     return r
 
 
-
 class ElementAPI:
     apitoken = None
     baseurl = "element-iot.com"
@@ -63,9 +62,22 @@ class ElementAPI:
     apiversion = "/"
     sync = False
     proxies = None
+    custom_ca = None
+    https_no_verify = False
     headers = {'Accept': 'application/json'}
 
-    def __init__(self, apitoken, baseurl=None, https=True, port=None, apiversion=1, sync=False, proxies=None):
+    def __init__(
+            self,
+            apitoken,
+            baseurl=None,
+            https=True,
+            port=None,
+            apiversion=1,
+            sync=False,
+            proxies=None,
+            custom_ca=None,
+            https_no_verify=False
+    ):
         if baseurl:
             self.baseurl = baseurl
 
@@ -87,12 +99,20 @@ class ElementAPI:
             elif type(proxies) is str:
                 # TODO: check if string ?
                 self.proxies = {'http%s' % ('s' if https else ''): proxies}
-                
+
+        self.custom_ca = custom_ca
+        self.https_no_verify = https_no_verify
+
         self.requestargs = {
             'headers': self.headers,
             'proxies': self.proxies
         }
 
+        if self.custom_ca:
+            self.requestargs['verify'] = self.custom_ca
+
+        if self.https_no_verify:
+            self.requestargs['verify'] = False
 
     # TODO: allow plain string paths !
     def genurl(self, _path=None, **opts):
@@ -167,7 +187,7 @@ class ElementAPI:
 
                 if resp.status_code >= 400:
                     if resp.status_code == 429 and not raise_rl:
-                        # hit reate-limit
+                        # hit create-limit
 
                         # sleep|block
 

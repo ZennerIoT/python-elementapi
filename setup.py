@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
   name='elementapi',
   packages=['elementapi'],
-  version='0.3.9',
+  version='0.4',
   description='element-iot api client lib',
   author='Stefan Reiser',
   author_email='sr@zenner-iot.com',
