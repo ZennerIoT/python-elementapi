@@ -1,7 +1,10 @@
 try:
-    import ujson as json
-except:
-    import json
+    import orjson as json
+except ImportError:
+    try:
+        import ujson as json
+    except:
+        import json
 
 import logging
 import re
