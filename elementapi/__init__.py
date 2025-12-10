@@ -79,7 +79,8 @@ class ElementAPI:
             sync=False,
             proxies=None,
             custom_ca=None,
-            https_no_verify=False
+            https_no_verify=False,
+            override_hostname=None
     ):
         if baseurl:
             self.baseurl = baseurl
@@ -105,6 +106,9 @@ class ElementAPI:
 
         self.custom_ca = custom_ca
         self.https_no_verify = https_no_verify
+
+        if override_hostname:
+            self.headers['Host'] = "%s:%s" % (override_hostname, port)
 
         self.requestargs = {
             'headers': self.headers,
