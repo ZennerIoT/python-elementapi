@@ -108,7 +108,7 @@ class ElementAPI:
         self.https_no_verify = https_no_verify
 
         if override_hostname:
-            self.headers['Host'] = "%s:%s" % (override_hostname, port)
+            self.headers['Host'] = "%s" % override_hostname
 
         self.requestargs = {
             'headers': self.headers,
