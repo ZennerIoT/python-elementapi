@@ -128,12 +128,14 @@ class ElementAPI:
         if not self._meta:
             resp=self._raw_req(('mandates', ))
 
-            mandates = resp.json()
+
+            mandates = resp.json().get('body')
             parent = None
             is_multi = len(mandates)>1
 
             if is_multi:
                 for m in mandates:
+                    print(m)
                     if not m.get('parent_id'):
                         parent = m
                         break
@@ -149,7 +151,7 @@ class ElementAPI:
                 'mandate_id': mandate_id ,
                 'mandate': mandate,
                 'is_multi': is_multi,
-                'mandates': mandates.get('body'),
+                'mandates': mandates,
                 'version': resp.json().get('nodes',[{}])[0].get('version')
 
             }
@@ -197,10 +199,21 @@ class ElementAPI:
             )
         )
 
-    def _raw_req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, noapi=False, **opts):
-        return list(self._req(uri=uri, limit=limit, lib_filter=lib_filter, stream=stream, raise_rl=raise_rl,  noapi=noapi, raw=True, **opts))[-1]
+    def _raw_req(self, uri=None, limit=None,  noapi=False, **opts):
+        url = self.genurl(
+            (uri if uri else ()),
+            noapi=noapi,
+            limit=limit,
+            **opts
+        )
+        self._log_request("GET", url)
+        resp = requests.get(url, **self.requestargs)
 
-    def _req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, raw=False, noapi=False, **opts):
+        return resp
+
+
+
+    def _req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, noapi=False, **opts):
         resp = None
         count = 0
 
@@ -215,9 +228,6 @@ class ElementAPI:
             )
             self._log_request("GET (streaming)", url)
             resp = requests.get(url, **self.requestargs)
-
-            if raw:
-                yield resp
 
             if resp.status_code >= 400:
                 raise ElementAPIException('HTTP Error', resp.status_code, get_body(resp))
@@ -248,9 +258,6 @@ class ElementAPI:
                 self._log_request("GET", url)
                 last_response = resp
                 resp = requests.get(url, **self.requestargs)
-
-                if raw:
-                    yield resp
 
                 if resp.status_code >= 400:
                     if resp.status_code == 429 and not raise_rl:
