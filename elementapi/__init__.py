@@ -68,6 +68,7 @@ class ElementAPI:
     custom_ca = None
     https_no_verify = False
     headers = {'Accept': 'application/json'}
+    _meta=None
 
     def __init__(
             self,
@@ -121,24 +122,71 @@ class ElementAPI:
         if self.https_no_verify:
             self.requestargs['verify'] = False
 
+
+    @property
+    def meta(self):
+        if not self._meta:
+            resp=self._raw_req(('mandates', ))
+
+            mandates = resp.json()
+            parent = None
+            is_multi = len(mandates)==1
+
+            if is_multi:
+                for m in mandates:
+                    if not m.get('parent_id'):
+                        parent = m
+                        break
+
+            mandate_id = resp.headers.get('x-zis-platform-mandate-id') if not is_multi else parent.get('id')
+            mandate = parent.get('name') if parent else( bytearray(resp.headers.get('x-zis-platform-mandate-name'), 'ISO-8859-1').decode(
+                    'utf-8') if 'x-zis-platform-mandate-name' in resp.headers else None)
+
+
+            resp = self._raw_req(('status',),noapi=True)
+
+            self._meta = {
+                'mandate_id': mandate_id ,
+                'mandate': mandate,
+                'is_multi': is_multi,
+                'mandates': mandates.get('body'),
+                'version': resp.json().get('nodes',[{}])[0].get('version')
+
+            }
+
+        return self._meta
+
+
     # TODO: allow plain string paths !
-    def genurl(self, _path=None, **opts):
+    def genurl(self, _path=None, noapi=False, **opts):
         if 'limit' not in opts or not opts['limit'] or opts['limit'] > 100:
             opts['limit'] = 100
 
         if opts.get('nolimit', False):
             opts.pop('limit')
 
-        rurl = "%s%s:%s%s/%s?auth=%s%s" \
-               % (
-                   "https://" if self.https else "http://",
-                   self.baseurl,
-                   self.port,
-                   self.apiversion, '/'.join(_path) if _path else '/',
-                   self.apitoken,
-                   '' if (not opts or not len(opts))
-                   else ('&%s' % '&'.join(['%s=%s' % (k, v) for k, v in opts.items() if v]))
-               )
+        if noapi:
+            rurl = "%s%s:%s/%s?auth=%s%s" \
+                   % (
+                       "https://" if self.https else "http://",
+                       self.baseurl,
+                       self.port,
+                       '/'.join(_path) if _path else '/',
+                       self.apitoken,
+                       '' if (not opts or not len(opts))
+                       else ('&%s' % '&'.join(['%s=%s' % (k, v) for k, v in opts.items() if v]))
+                   )
+        else:
+            rurl = "%s%s:%s%s/%s?auth=%s%s" \
+                   % (
+                       "https://" if self.https else "http://",
+                       self.baseurl,
+                       self.port,
+                       self.apiversion, '/'.join(_path) if _path else '/',
+                       self.apitoken,
+                       '' if (not opts or not len(opts))
+                       else ('&%s' % '&'.join(['%s=%s' % (k, v) for k, v in opts.items() if v]))
+                   )
         return rurl
 
     def _log_request(self, meth, url, data=None):
@@ -149,7 +197,10 @@ class ElementAPI:
             )
         )
 
-    def _req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, **opts):
+    def _raw_req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, noapi=False, **opts):
+        return list(self._req(uri=uri, limit=limit, lib_filter=lib_filter, stream=stream, raise_rl=raise_rl,  noapi=noapi, raw=True, **opts))[-1]
+
+    def _req(self, uri=None, limit=None, lib_filter=None, stream=False, raise_rl=False, raw=False, noapi=False, **opts):
         resp = None
         count = 0
 
@@ -159,10 +210,14 @@ class ElementAPI:
             url = self.genurl(
                 (uri if uri else ()) + ('stream',),
                 nolimit=True,
+                noapi=noapi,
                 **opts
             )
             self._log_request("GET (streaming)", url)
             resp = requests.get(url, **self.requestargs)
+
+            if raw:
+                yield resp
 
             if resp.status_code >= 400:
                 raise ElementAPIException('HTTP Error', resp.status_code, get_body(resp))
@@ -186,11 +241,16 @@ class ElementAPI:
                 url = self.genurl(
                     (uri if uri else ()),
                     retrieve_after=(resp.get('retrieve_after_id', None) if resp else None),
-                    limit=limit, **opts
+                    noapi=noapi,
+                    limit=limit,
+                    **opts,
                 )
                 self._log_request("GET", url)
                 last_response = resp
                 resp = requests.get(url, **self.requestargs)
+
+                if raw:
+                    yield resp
 
                 if resp.status_code >= 400:
                     if resp.status_code == 429 and not raise_rl:

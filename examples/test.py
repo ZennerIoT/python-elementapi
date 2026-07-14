@@ -11,6 +11,8 @@ if not apikey:
     sys.exit(-1)
 
 api = ElementAPI(apikey, baseurl='stage.element-iot.com')
+print("META\n"+16*'-')
+print( api.meta)
 
 print("TAGS\n"+16*'-')
 try:
