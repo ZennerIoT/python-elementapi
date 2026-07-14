@@ -130,7 +130,7 @@ class ElementAPI:
 
             mandates = resp.json()
             parent = None
-            is_multi = len(mandates)==1
+            is_multi = len(mandates)>1
 
             if is_multi:
                 for m in mandates:
